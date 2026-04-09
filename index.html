@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Prompt Factory - 專業穩定版</title>
+    <title>AI Prompt Lab - 終極穩定版</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & Babel -->
@@ -12,9 +12,9 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .animate-up { animation: fadeInUp 0.5s ease-out; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .result-card { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
@@ -59,21 +59,20 @@
             };
 
             const analyzeImage = async () => {
-                if (!apiKey) { setError("請設定 API Key。"); setIsSettingsOpen(true); return; }
-                if (!imageContent.data) { setError("請選擇圖片。"); return; }
+                if (!apiKey) { setError("請設定 API Key"); setIsSettingsOpen(true); return; }
+                if (!imageContent.data) { setError("請上傳圖片"); return; }
 
                 setIsLoading(true);
                 setError(null);
                 setAnalysis(null);
 
-                // 使用正式版 v1 接口
-                const model = "gemini-1.5-flash";
-                const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+                // 使用 v1beta 端點 (Flash 支援度最高)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
                 const payload = {
                     contents: [{
                         parts: [
-                            { text: "深度解析圖片內容。請以繁體中文描述風格與情節。必須以純 JSON 格式回傳，不可有額外開場白，格式如下：{\"summary\":\"關於風格的簡述\",\"chinese_details\":{\"style\":\"風格細節描述\",\"subject\":\"情節細節描述\"},\"english_prompts\":[\"prompt_key_1\",\"prompt_key_2\"]}" },
+                            { text: "深度解析圖片。請以繁體中文描述風格與情節，並提供英文提示詞清單。輸出必須是純 JSON，格式如下：{\"summary\":\"總結\",\"chinese_details\":{\"style\":\"風格描述\",\"subject\":\"情節描述\"},\"english_prompts\":[\"p1\",\"p2\"]}" },
                             { inlineData: { mimeType: imageContent.mimeType, data: imageContent.data } }
                         ]
                     }]
@@ -89,21 +88,22 @@
                     const data = await response.json();
 
                     if (!response.ok) {
-                        const msg = data.error?.message || response.statusText;
-                        throw new Error(`API 錯誤 (${response.status}): ${msg}`);
+                        const message = data.error?.message || "未知 API 錯誤";
+                        throw new Error(`[${response.status}] ${message}`);
                     }
 
                     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (!rawText) throw new Error("AI 產出為空，請檢查圖片或 API 狀態。");
+                    if (!rawText) throw new Error("AI 未能產出內容，可能是安全過濾器攔截。");
 
-                    // 嘗試清洗並解析 JSON
+                    // 強化 JSON 解析
                     try {
-                        const jsonString = rawText.replace(/```json|```/gi, "").trim();
-                        const parsed = JSON.parse(jsonString);
+                        const jsonPart = rawText.match(/\{[\s\S]*\}/);
+                        if (!jsonPart) throw new Error("回傳格式非 JSON");
+                        const parsed = JSON.parse(jsonPart[0]);
                         setAnalysis(parsed);
                     } catch (pErr) {
-                        console.error("RAW TEXT:", rawText);
-                        throw new Error("JSON 解析失敗，AI 回傳了非結構化文字。請再試一次。");
+                        console.error("RAW DATA:", rawText);
+                        setError(`解析失敗。AI 原始回傳：${rawText.substring(0, 100)}...`);
                     }
 
                 } catch (err) {
@@ -115,9 +115,9 @@
 
             const copyToClipboard = () => {
                 if (!analysis) return;
-                const content = `解析摘要：${analysis.summary}\n\n風格：${analysis.chinese_details?.style}\n情節：${analysis.chinese_details?.subject}`;
+                const text = `${analysis.summary}\n\n風格：${analysis.chinese_details?.style}\n情節：${analysis.chinese_details?.subject}`;
                 const el = document.createElement('textarea');
-                el.value = content;
+                el.value = text;
                 document.body.appendChild(el);
                 el.select();
                 document.execCommand('copy');
@@ -127,107 +127,110 @@
             };
 
             return (
-                <div className="max-w-xl mx-auto px-4 py-8 md:py-16">
-                    {/* API Key 設定區 */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
+                <div className="max-w-2xl mx-auto px-4 py-10">
+                    {/* API Settings */}
+                    <div className="bg-white rounded-2xl shadow-sm border mb-8 overflow-hidden">
                         <div 
                             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                            className="p-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors"
+                            className="p-4 flex justify-between items-center cursor-pointer bg-slate-50 hover:bg-slate-100"
                         >
-                            <span className="font-bold text-slate-500 tracking-widest text-[10px] uppercase italic">🛡️ API 安全設定 {apiKey && "✅"}</span>
+                            <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">API Configuration {apiKey && "✅"}</span>
                             <span className="text-xs">{isSettingsOpen ? "▲" : "▼"}</span>
                         </div>
                         {isSettingsOpen && (
-                            <div className="p-4 pt-0">
+                            <div className="p-5 space-y-3">
                                 <input 
                                     type="password"
-                                    placeholder="輸入您的 Gemini API Key"
+                                    placeholder="貼上您的 Gemini API Key"
                                     value={apiKey}
                                     onChange={(e) => {
                                         const val = e.target.value.trim();
                                         setApiKey(val);
                                         localStorage.setItem('gemini_api_key', val);
                                     }}
-                                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+                                    className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs shadow-inner"
                                 />
-                                <div className="mt-3 flex justify-between text-[10px] text-slate-400 font-medium">
-                                    <span>本地存儲，安全不外洩</span>
-                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-indigo-600 underline">獲取密鑰</a>
+                                <div className="flex justify-between text-[10px] text-slate-400 font-bold px-1">
+                                    <span>本地儲存模式</span>
+                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-indigo-600">取得新 KEY →</a>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* Logo 與標題 */}
+                    {/* Logo */}
                     <div className="text-center mb-12">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 text-white rounded-[1.5rem] shadow-2xl mb-6 transform rotate-3">
-                            <span className="text-2xl font-bold">A</span>
-                        </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Prompt Factory</h1>
-                        <p className="text-slate-400 text-[10px] font-black tracking-[0.3em] uppercase mt-2">v1.2 Stable Engine</p>
+                        <div className="w-16 h-16 bg-slate-900 text-white rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 text-3xl font-black shadow-2xl ring-8 ring-indigo-50">A</div>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Prompt Lab</h1>
                     </div>
 
-                    {/* 主要上傳區 */}
+                    {/* Image Area */}
                     <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 mb-8">
                         <div 
-                            onClick={() => document.getElementById('upload-input').click()}
-                            className={`border-2 border-dashed rounded-[2rem] min-h-[300px] flex items-center justify-center cursor-pointer transition-all ${selectedImage ? 'bg-slate-50 border-indigo-200' : 'border-slate-300 hover:border-indigo-400'}`}
+                            onClick={() => document.getElementById('file-upload').click()}
+                            className={`border-4 border-double rounded-[2rem] min-h-[320px] flex items-center justify-center cursor-pointer transition-all ${selectedImage ? 'bg-slate-50 border-indigo-200' : 'border-slate-200 hover:border-indigo-400'}`}
                         >
                             {selectedImage ? (
-                                <img src={selectedImage} className="max-h-[260px] object-contain rounded-xl" />
+                                <img src={selectedImage} className="max-h-[280px] object-contain rounded-2xl" />
                             ) : (
-                                <div className="text-center space-y-2 opacity-30">
-                                    <p className="text-4xl">📁</p>
-                                    <p className="font-bold text-sm">選擇解析影像</p>
+                                <div className="text-center space-y-3 opacity-20">
+                                    <p className="text-5xl">📷</p>
+                                    <p className="font-black text-xs uppercase tracking-widest">Select Image</p>
                                 </div>
                             )}
-                            <input id="upload-input" type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                            <input id="file-upload" type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
                         </div>
                         
                         <button 
                             onClick={analyzeImage}
                             disabled={isLoading || !imageContent.data}
-                            className={`w-full mt-8 py-5 rounded-2xl font-black text-xl transition-all shadow-xl active:scale-95 ${isLoading || !imageContent.data ? 'bg-slate-100 text-slate-300' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'}`}
+                            className={`w-full mt-8 py-5 rounded-2xl font-black text-xl transition-all shadow-xl active:scale-95 ${isLoading || !imageContent.data ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-100'}`}
                         >
-                            {isLoading ? "ANALYZING..." : "開始分析"}
+                            {isLoading ? "PROSESSING..." : "開始深度分析"}
                         </button>
                     </div>
 
-                    {/* 錯誤反饋 */}
+                    {/* Error Box */}
                     {error && (
-                        <div className="p-5 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold mb-8 animate-up flex gap-3">
-                            <span>❌</span>
-                            <div className="break-words w-full overflow-hidden">
-                                <p className="mb-1 uppercase tracking-wider">Error Report</p>
-                                <p className="opacity-70 font-mono">{error}</p>
+                        <div className="p-6 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold mb-8 animate-up flex gap-4">
+                            <span className="text-xl">⚠️</span>
+                            <div className="overflow-hidden">
+                                <p className="mb-1 uppercase tracking-wider">Debug Log:</p>
+                                <p className="opacity-75 font-mono break-words leading-relaxed">{error}</p>
                             </div>
                         </div>
                     )}
 
-                    {/* 成功結果 */}
+                    {/* Result Card */}
                     {analysis && (
-                        <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden animate-up">
+                        <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden result-card">
                             <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-                                <h2 className="font-black text-slate-800 tracking-widest italic uppercase">Analysis Result</h2>
+                                <h2 className="font-black text-slate-900 italic uppercase">Analysis Result</h2>
                                 <button onClick={copyToClipboard} className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all ${copied ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-900 text-white'}`}>
                                     {copied ? "COPIED" : "COPY DATA"}
                                 </button>
                             </div>
-                            <div className="p-8 md:p-12 space-y-12 text-slate-700 leading-relaxed">
+                            <div className="p-10 md:p-14 space-y-12">
                                 <p className="font-bold text-2xl tracking-tight text-slate-900 leading-tight">{analysis.summary}</p>
                                 
-                                <div className="space-y-10">
-                                    <section className="pl-5 border-l-4 border-indigo-500">
-                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-4">繁體中文描述</h3>
-                                        <div className="space-y-4">
-                                            <p className="text-base"><b>＊ 風格構圖：</b>{analysis.chinese_details?.style}</p>
-                                            <p className="text-base"><b>＊ 主體情節：</b>{analysis.chinese_details?.subject}</p>
+                                <div className="space-y-12">
+                                    <section className="pl-6 border-l-4 border-indigo-500">
+                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-6 italic">Chinese Description</h3>
+                                        <div className="space-y-6">
+                                            <div className="space-y-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Style & Composition</span>
+                                                <p className="text-slate-700 font-medium text-lg leading-relaxed">{analysis.chinese_details?.style}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Subject Matter</span>
+                                                <p className="text-slate-700 font-medium text-lg leading-relaxed">{analysis.chinese_details?.subject}</p>
+                                            </div>
                                         </div>
                                     </section>
 
                                     <section>
-                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-4">Prompt Keywords</h3>
-                                        <div className="bg-slate-900 p-6 rounded-3xl font-mono text-sm text-indigo-300 shadow-inner">
+                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-6 italic">Prompt Keywords</h3>
+                                        <div className="bg-slate-900 p-8 rounded-[2rem] font-mono text-sm text-indigo-300 leading-relaxed shadow-inner">
                                             {Array.isArray(analysis.english_prompts) ? analysis.english_prompts.join(', ') : analysis.english_prompts}
                                         </div>
                                     </section>
@@ -236,8 +239,8 @@
                         </div>
                     )}
 
-                    <footer className="mt-20 text-center text-slate-300 text-[8px] font-black tracking-[0.4em] uppercase">
-                        Enterprise AI Framework v1.2
+                    <footer className="mt-20 text-center text-slate-300 text-[9px] font-black tracking-[0.4em] uppercase">
+                        AI Vision Lab v1.3
                     </footer>
                 </div>
             );
@@ -248,4 +251,3 @@
     </script>
 </body>
 </html>
-```
