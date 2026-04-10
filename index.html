@@ -221,13 +221,14 @@
     hideError();
   }
 
-  // Prompts
+  // Prompts — each includes explicit JSON instruction to ensure reliable output
+  const JSON_FORMAT = '\n\n你的回應必須只有純 JSON，不含任何 markdown 或額外文字，格式如下：{"description":"此處填寫圖像描述","keyPhrases":["關鍵句1","關鍵句2","關鍵句3","關鍵句4","關鍵句5"]}';
   const prompts = {
-    general:   '請用繁體中文分析這張圖片。首先提供一段流暢的圖像描述（2-4句），然後萃取5-7個最具代表性的關鍵句子，捕捉圖片的核心意涵、情感或重要細節。',
-    academic:  '請用繁體中文以學術角度分析這張圖片。首先提供嚴謹的圖像描述（2-4句），然後萃取5-7個學術關鍵句子，著重結構、符號意義或可引用的觀察點。',
-    marketing: '請用繁體中文以行銷角度分析這張圖片。首先描述視覺賣點（2-4句），然後萃取5-7個能用於行銷文案的關鍵句子，強調情感連結或品牌故事。',
-    story:     '請用繁體中文以故事敘事角度分析這張圖片。首先描述情境與氛圍（2-4句），然後萃取5-7個富有敘事張力的關鍵句子，彷彿從圖片讀出一段故事。',
-    technical: '請用繁體中文以技術細節角度分析這張圖片。首先描述技術要素（2-4句），然後萃取5-7個技術性關鍵句子，著重構圖、色彩、規格或專業細節。'
+    general:   '請用繁體中文分析這張圖片。首先提供一段流暢的圖像描述（2-4句），然後萃取5-7個最具代表性的關鍵句子，捕捉圖片的核心意涵、情感或重要細節。' + JSON_FORMAT,
+    academic:  '請用繁體中文以學術角度分析這張圖片。首先提供嚴謹的圖像描述（2-4句），然後萃取5-7個學術關鍵句子，著重結構、符號意義或可引用的觀察點。' + JSON_FORMAT,
+    marketing: '請用繁體中文以行銷角度分析這張圖片。首先描述視覺賣點（2-4句），然後萃取5-7個能用於行銷文案的關鍵句子，強調情感連結或品牌故事。' + JSON_FORMAT,
+    story:     '請用繁體中文以故事敘事角度分析這張圖片。首先描述情境與氛圍（2-4句），然後萃取5-7個富有敘事張力的關鍵句子，彷彿從圖片讀出一段故事。' + JSON_FORMAT,
+    technical: '請用繁體中文以技術細節角度分析這張圖片。首先描述技術要素（2-4句），然後萃取5-7個技術性關鍵句子，著重構圖、色彩、規格或專業細節。' + JSON_FORMAT
   };
 
   // Analyze via Gemini
@@ -242,7 +243,7 @@
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     const style = document.getElementById('styleSelect').value;
 
-    const systemText = '你是專業影像分析師。只能回傳純 JSON，不得有任何額外文字或 markdown。格式：{"description":"圖像描述","keyPhrases":["句1","句2","句3","句4","句5"]}';
+    const systemText = '你是專業影像分析師，擅長以不同風格解讀圖像。你的每一次回應都必須是合法的 JSON 物件，絕對不可包含任何 markdown 語法、程式碼區塊或說明文字。';
 
     try {
       const res = await fetch(url, {
