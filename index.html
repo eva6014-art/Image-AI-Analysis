@@ -20,115 +20,101 @@
         <!-- Header -->
         <header class="text-center mb-8">
             <h1 class="text-4xl font-black text-gray-900 mb-2 tracking-tight">AI 快速圖像分析</h1>
-            <p class="text-gray-500">優化壓縮技術，秒級生成關鍵字與摘要</p>
+            <p class="text-gray-500">穩定修正版：使用 Gemini 1.5 Flash 模型</p>
         </header>
 
         <!-- API Key -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 mb-8 flex flex-wrap items-center gap-4">
             <div class="flex-1 min-w-[280px]">
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Gemini API Key</label>
-                <input type="password" id="apiKeyInput" placeholder="輸入 API Key..." 
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Google Gemini API Key</label>
+                <input type="password" id="apiKeyInput" placeholder="在此輸入您的 API Key..." 
                        class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
             </div>
             <div class="pt-5">
-                <button id="saveKeyBtn" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 transition-all">確認儲存</button>
+                <button id="saveKeyBtn" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700 transition-all">儲存 Key</button>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <!-- Left Side: Upload -->
+            <!-- Left Side -->
             <div class="lg:col-span-5 space-y-6">
                 <div id="dropZone" class="group border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-all flex flex-col items-center justify-center min-h-[350px]">
                     <input type="file" id="fileInput" accept="image/*" class="hidden">
                     <div class="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                         <i class="fa-solid fa-image text-2xl"></i>
                     </div>
-                    <p class="text-gray-600 font-bold text-lg">拖曳或點擊上傳</p>
-                    <p class="text-sm text-gray-400 mt-1">自動優化大圖，加速 AI 解析</p>
+                    <p class="text-gray-600 font-bold text-lg">選擇或拖曳圖片</p>
                 </div>
 
                 <div id="previewContainer" class="hidden bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden fade-in">
-                    <div class="relative group">
+                    <div class="relative">
                         <img id="imagePreview" src="" alt="預覽" class="w-full h-auto max-h-[400px] object-contain bg-gray-100">
-                        <button id="clearBtn" class="absolute top-4 right-4 bg-white/90 backdrop-blur shadow-md w-10 h-10 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                        <button id="clearBtn" class="absolute top-4 right-4 bg-white/90 shadow w-10 h-10 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all">
                             <i class="fa-solid fa-times"></i>
                         </button>
                     </div>
-                    <div class="p-4 flex items-center justify-between text-sm">
-                        <span id="fileInfo" class="text-gray-500 truncate mr-4 italic"></span>
-                        <span id="compressInfo" class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold"></span>
+                    <div class="p-4 flex justify-between items-center text-xs font-mono text-gray-400">
+                        <span id="fileInfo" class="truncate"></span>
+                        <span id="compressInfo" class="bg-blue-50 text-blue-600 px-2 py-1 rounded"></span>
                     </div>
                 </div>
 
                 <button id="analyzeBtn" disabled class="w-full py-5 bg-gray-900 text-white rounded-2xl font-bold text-lg shadow-xl hover:shadow-gray-200 disabled:bg-gray-200 disabled:shadow-none transition-all flex items-center justify-center gap-3">
-                    <span id="btnText">啟動 AI 分析</span>
+                    <span id="btnText">開始 AI 分析</span>
                     <i id="btnLoader" class="fa-solid fa-spinner loading-spin hidden"></i>
                 </button>
             </div>
 
-            <!-- Right Side: Results -->
+            <!-- Right Side -->
             <div class="lg:col-span-7">
                 <div class="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 min-h-[500px] flex flex-col">
                     <div class="flex items-center justify-between mb-6">
-                        <h2 class="text-xl font-black flex items-center gap-2">
-                            <span class="w-2 h-6 bg-blue-500 rounded-full"></span>
-                            分析結果
-                        </h2>
-                        <div id="timer" class="text-xs font-mono text-gray-400 hidden">處理時間: <span id="seconds">0</span>s</div>
+                        <h2 class="text-xl font-black">分析結果</h2>
+                        <div id="timer" class="text-xs font-mono text-gray-400 hidden">耗時: <span id="seconds">0</span>s</div>
                         <button id="copyBtn" class="hidden w-10 h-10 rounded-xl bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
                             <i class="fa-regular fa-copy"></i>
                         </button>
                     </div>
 
-                    <div id="statusIndicator" class="hidden mb-4 p-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-medium flex items-center gap-2">
-                        <i class="fa-solid fa-bolt-lightning animate-pulse"></i>
-                        <span id="statusText">正在進行壓縮與傳輸...</span>
-                    </div>
-
                     <div id="placeholderText" class="flex-1 flex flex-col items-center justify-center text-gray-300 space-y-4">
-                        <i class="fa-solid fa-brain text-6xl opacity-20"></i>
-                        <p class="font-medium">待機中，請提供圖片與 API Key</p>
+                        <i class="fa-solid fa-wand-magic-sparkles text-6xl opacity-20"></i>
+                        <p>請上傳圖片後點擊分析按鈕</p>
                     </div>
 
-                    <div id="errorMessage" class="hidden p-5 bg-red-50 text-red-600 rounded-2xl text-sm border border-red-100 flex items-start gap-3">
-                        <i class="fa-solid fa-circle-exclamation mt-1"></i>
-                        <span id="errorText"></span>
+                    <div id="errorMessage" class="hidden p-5 bg-red-50 text-red-600 rounded-2xl text-sm border border-red-100">
+                        <div class="flex gap-3">
+                            <i class="fa-solid fa-circle-exclamation mt-1"></i>
+                            <span id="errorText"></span>
+                        </div>
                     </div>
 
-                    <div id="resultContent" class="hidden space-y-4 text-gray-700 leading-relaxed">
-                        <!-- Content injection -->
+                    <div id="resultContent" class="hidden space-y-4 text-gray-700 leading-relaxed overflow-y-auto max-h-[600px]">
+                        <!-- Content -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Toast Message -->
     <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl opacity-0 transition-opacity pointer-events-none z-50 font-bold text-sm"></div>
 
     <script>
-        // --- 核心變數 ---
         let currentApiKey = "";
         let optimizedImageBase64 = null;
         let timerInterval = null;
-        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        // 改為使用最穩定的 Flash 模型版本
+        const MODEL_NAME = "gemini-1.5-flash";
         
-        // DOM 元素引用
         const apiKeyInput = document.getElementById('apiKeyInput');
         const saveKeyBtn = document.getElementById('saveKeyBtn');
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const previewContainer = document.getElementById('previewContainer');
         const imagePreview = document.getElementById('imagePreview');
-        const compressInfo = document.getElementById('compressInfo');
         const analyzeBtn = document.getElementById('analyzeBtn');
         const resultContent = document.getElementById('resultContent');
         const placeholderText = document.getElementById('placeholderText');
         const errorMessage = document.getElementById('errorMessage');
-        const statusIndicator = document.getElementById('statusIndicator');
-        const timerDisplay = document.getElementById('timer');
-
-        // --- 功能模組 ---
 
         function showToast(msg) {
             const toast = document.getElementById('toast');
@@ -137,86 +123,48 @@
             setTimeout(() => toast.classList.replace('opacity-100', 'opacity-0'), 2500);
         }
 
-        // 保存 API Key
         saveKeyBtn.addEventListener('click', () => {
             currentApiKey = apiKeyInput.value.trim();
             if (currentApiKey) {
-                showToast("API Key 已成功載入");
+                showToast("API Key 已儲存");
                 checkReady();
             }
         });
 
-        // 圖片壓縮優化 (關鍵性能提升點)
-        function optimizeImage(file) {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.src = e.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-                        const MAX_SIZE = 1024; // 限制長寬，足以識別但極大縮減體積
-
-                        if (width > height) {
-                            if (width > MAX_SIZE) {
-                                height *= MAX_SIZE / width;
-                                width = MAX_SIZE;
-                            }
-                        } else {
-                            if (height > MAX_SIZE) {
-                                width *= MAX_SIZE / height;
-                                height = MAX_SIZE;
-                            }
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        // 轉換為 WebP 格式並降低品質以加快傳輸
-                        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-                        const base64 = dataUrl.split(',')[1];
-                        
-                        const originalKB = Math.round(file.size / 1024);
-                        const optimizedKB = Math.round((base64.length * 0.75) / 1024);
-                        
-                        resolve({
-                            base64,
-                            dataUrl,
-                            stats: `壓縮: ${originalKB}KB → ${optimizedKB}KB`
-                        });
-                    };
-                };
-            });
-        }
-
-        // 處理檔案
         async function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showToast("格式錯誤，請提供圖片");
-                return;
-            }
-
-            statusIndicator.classList.remove('hidden');
-            document.getElementById('statusText').innerText = "優化圖片體積中...";
+            if (!file.type.startsWith('image/')) return;
             
-            const result = await optimizeImage(file);
-            optimizedImageBase64 = result.base64;
-            imagePreview.src = result.dataUrl;
-            compressInfo.innerText = result.stats;
-            document.getElementById('fileInfo').innerText = file.name;
-            
-            dropZone.classList.add('hidden');
-            previewContainer.classList.remove('hidden');
-            statusIndicator.classList.add('hidden');
-            checkReady();
+            // 壓縮圖片以提升穩定性與速度
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (e) => {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 1024;
+                    let w = img.width, h = img.height;
+                    if (w > h && w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
+                    else if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
+                    
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    optimizedImageBase64 = dataUrl.split(',')[1];
+                    imagePreview.src = dataUrl;
+                    document.getElementById('compressInfo').innerText = `優化完畢 (${w}x${h})`;
+                    document.getElementById('fileInfo').innerText = file.name;
+                    
+                    dropZone.classList.add('hidden');
+                    previewContainer.classList.remove('hidden');
+                    checkReady();
+                };
+            };
         }
 
-        // 事件綁定
         dropZone.addEventListener('click', () => fileInput.click());
         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drop-zone--over'); });
         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drop-zone--over'));
@@ -238,106 +186,78 @@
             analyzeBtn.disabled = !(currentApiKey && optimizedImageBase64);
         }
 
-        // --- AI 通訊 ---
-
-        async function fetchAIAnalysis(base64, retry = 0) {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${currentApiKey}`;
-            
-            // 簡化 Prompt 使 AI 回覆更迅速且精確
-            const body = {
-                contents: [{
-                    parts: [
-                        { text: "這是一張圖片。請以繁體中文提供：1. 簡短描述 (1句)。2. 5個關鍵句子。3. 10個標籤。請使用清晰的 Markdown 格式。" },
-                        { inlineData: { mimeType: "image/jpeg", data: base64 } }
-                    ]
-                }]
-            };
-
-            try {
-                const res = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-
-                if (!res.ok) {
-                    const error = await res.json();
-                    throw new Error(error.error?.message || "網路錯誤");
-                }
-                return await res.json();
-            } catch (err) {
-                if (retry < 3) {
-                    await new Promise(r => setTimeout(r, 1000 * (retry + 1)));
-                    return fetchAIAnalysis(base64, retry + 1);
-                }
-                throw err;
-            }
-        }
-
-        // --- 啟動按鈕邏輯 ---
-
         analyzeBtn.addEventListener('click', async () => {
-            // UI 重置
             analyzeBtn.disabled = true;
             document.getElementById('btnLoader').classList.remove('hidden');
-            document.getElementById('btnText').innerText = "AI 正在思考...";
+            document.getElementById('btnText').innerText = "AI 分析中...";
             errorMessage.classList.add('hidden');
             resultContent.classList.add('hidden');
             placeholderText.classList.add('hidden');
-            document.getElementById('copyBtn').classList.add('hidden');
             
-            // 計時器
             let sec = 0;
-            document.getElementById('seconds').innerText = "0";
-            timerDisplay.classList.remove('hidden');
+            document.getElementById('timer').classList.remove('hidden');
             timerInterval = setInterval(() => {
                 sec++;
                 document.getElementById('seconds').innerText = sec;
             }, 1000);
 
-            statusIndicator.classList.remove('hidden');
-            document.getElementById('statusText').innerText = "正在傳輸優化後的圖像並等待回傳...";
-
             try {
-                const data = await fetchAIAnalysis(optimizedImageBase64);
-                const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${currentApiKey}`;
+                const payload = {
+                    contents: [{
+                        parts: [
+                            { text: "請用繁體中文分析這張圖。內容包含：1. 簡單描述。 2. 五個關鍵重點句子。 3. 十個核心標籤 (Tag)。請使用 Markdown 格式。" },
+                            { inlineData: { mimeType: "image/jpeg", data: optimizedImageBase64 } }
+                        ]
+                    }]
+                };
 
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    throw new Error(data.error?.message || "請求發生錯誤");
+                }
+
+                const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (rawText) {
-                    // 簡易 Markdown 轉換為 HTML
+                    // 簡單轉換 Markdown 樣式
                     resultContent.innerHTML = rawText
-                        .split('\n').map(line => {
-                            if (line.startsWith('#')) return `<h3 class="text-lg font-black text-blue-600 mt-4">${line.replace(/#+\s*/, '')}</h3>`;
-                            if (line.startsWith('-') || line.startsWith('*')) return `<div class="flex gap-2 items-start py-1"><span class="text-blue-400 mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0"></span><span>${line.replace(/^[-*]\s*/, '')}</span></div>`;
-                            return line.trim() ? `<p class="mb-2">${line}</p>` : '';
+                        .split('\n').map(l => {
+                            if (l.startsWith('#')) return `<h3 class="text-lg font-bold text-blue-600 mt-3">${l.replace(/#+\s*/, '')}</h3>`;
+                            if (l.trim().startsWith('-') || l.trim().startsWith('*')) return `<li class="ml-4 list-disc py-1">${l.replace(/^[-*]\s*/, '')}</li>`;
+                            return l.trim() ? `<p class="mb-1">${l}</p>` : '<br>';
                         }).join('');
-                    
                     resultContent.classList.remove('hidden');
                     document.getElementById('copyBtn').classList.remove('hidden');
                 } else {
-                    throw new Error("AI 雖然接收了圖片，但沒有返回任何文字結果。");
+                    throw new Error("AI 未能產出內容，請嘗試更換圖片。");
                 }
             } catch (err) {
-                document.getElementById('errorText').innerText = err.message;
+                document.getElementById('errorText').innerText = `分析失敗：${err.message}`;
                 errorMessage.classList.remove('hidden');
             } finally {
                 clearInterval(timerInterval);
                 analyzeBtn.disabled = false;
                 document.getElementById('btnLoader').classList.add('hidden');
                 document.getElementById('btnText').innerText = "再次分析";
-                statusIndicator.classList.add('hidden');
             }
         });
 
-        // 複製文字
         document.getElementById('copyBtn').addEventListener('click', () => {
             const text = resultContent.innerText;
-            const temp = document.createElement('textarea');
-            temp.value = text;
-            document.body.appendChild(temp);
-            temp.select();
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
             document.execCommand('copy');
-            document.body.removeChild(temp);
-            showToast("分析結果已複製");
+            document.body.removeChild(el);
+            showToast("內容已複製");
         });
     </script>
 </body>
