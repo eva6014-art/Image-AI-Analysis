@@ -96,7 +96,7 @@
   <div class="headline">
     <h1>上傳圖片，<em>提煉關鍵</em></h1>
     <p>由 Google Gemini AI 解析影像，萃取核心句子與洞察</p>
-    <span class="badge">POWERED BY GEMINI 1.5 FLASH</span>
+    <span class="badge">POWERED BY GEMINI 2.5 FLASH</span>
   </div>
 
   <div class="upload-zone" id="dropZone">
@@ -239,7 +239,7 @@
     showLoading(true); hideError();
     document.getElementById('results').style.display = 'none';
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     const style = document.getElementById('styleSelect').value;
 
     const systemText = '你是專業影像分析師。只能回傳純 JSON，不得有任何額外文字或 markdown。格式：{"description":"圖像描述","keyPhrases":["句1","句2","句3","句4","句5"]}';
@@ -247,7 +247,7 @@
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemText }] },
           contents: [{ parts: [
