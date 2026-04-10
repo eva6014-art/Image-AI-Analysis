@@ -3,251 +3,290 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Prompt Lab - 終極穩定版</title>
-    <!-- Tailwind CSS -->
+    <title>AI 圖像關鍵字生成器</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
-        .result-card { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        .drop-zone--over { border-color: #3b82f6; background-color: #eff6ff; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .loading-spin { animation: spin 1s linear infinite; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-slate-50 min-h-screen text-slate-800 font-sans">
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">AI 圖像關鍵字生成器</h1>
+            <p class="text-slate-600">上傳圖片，讓 AI 為您提取核心訊息與關鍵句子</p>
+        </header>
 
-        const App = () => {
-            const [apiKey, setApiKey] = useState('');
-            const [isSettingsOpen, setIsSettingsOpen] = useState(true);
-            const [selectedImage, setSelectedImage] = useState(null);
-            const [imageContent, setImageContent] = useState({ data: null, mimeType: null });
-            const [isLoading, setIsLoading] = useState(false);
-            const [analysis, setAnalysis] = useState(null);
-            const [error, setError] = useState(null);
-            const [copied, setCopied] = useState(false);
+        <!-- API Key Input -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+            <label class="block text-sm font-medium text-slate-700 mb-2">
+                <i class="fa-solid fa-key mr-1"></i> Google Gemini API Key
+            </label>
+            <div class="flex gap-2">
+                <input type="password" id="apiKeyInput" placeholder="請輸入您的 Gemini API Key..." 
+                       class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                <button id="saveKeyBtn" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors">
+                    確認
+                </button>
+            </div>
+            <p class="mt-2 text-xs text-slate-500">
+                Key 將僅保存在目前的視窗中，不會被儲存至伺服器。
+            </p>
+        </div>
 
-            useEffect(() => {
-                const savedKey = localStorage.getItem('gemini_api_key');
-                if (savedKey) {
-                    setApiKey(savedKey);
-                    setIsSettingsOpen(false);
-                }
-            }, []);
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- Left: Upload Section -->
+            <div class="space-y-6">
+                <div id="dropZone" class="border-2 border-dashed border-slate-300 bg-white rounded-2xl p-8 text-center cursor-pointer hover:border-blue-400 transition-all flex flex-col items-center justify-center min-h-[300px]">
+                    <input type="file" id="fileInput" accept="image/*" class="hidden">
+                    <i class="fa-solid fa-cloud-arrow-up text-5xl text-slate-400 mb-4"></i>
+                    <p class="text-slate-600 font-medium">點擊或拖曳圖片至此</p>
+                    <p class="text-xs text-slate-400 mt-2">支援 JPG, PNG, WEBP (最大 4MB)</p>
+                </div>
 
-            const handleImageChange = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    setSelectedImage(URL.createObjectURL(file));
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        setImageContent({
-                            data: reader.result.split(',')[1],
-                            mimeType: file.type
-                        });
-                    };
-                    reader.readAsDataURL(file);
-                    setError(null);
-                    setAnalysis(null);
-                }
-            };
-
-            const analyzeImage = async () => {
-                if (!apiKey) { setError("請設定 API Key"); setIsSettingsOpen(true); return; }
-                if (!imageContent.data) { setError("請上傳圖片"); return; }
-
-                setIsLoading(true);
-                setError(null);
-                setAnalysis(null);
-
-                // 使用 v1beta 端點 (Flash 支援度最高)
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-                const payload = {
-                    contents: [{
-                        parts: [
-                            { text: "深度解析圖片。請以繁體中文描述風格與情節，並提供英文提示詞清單。輸出必須是純 JSON，格式如下：{\"summary\":\"總結\",\"chinese_details\":{\"style\":\"風格描述\",\"subject\":\"情節描述\"},\"english_prompts\":[\"p1\",\"p2\"]}" },
-                            { inlineData: { mimeType: imageContent.mimeType, data: imageContent.data } }
-                        ]
-                    }]
-                };
-
-                try {
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        const message = data.error?.message || "未知 API 錯誤";
-                        throw new Error(`[${response.status}] ${message}`);
-                    }
-
-                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (!rawText) throw new Error("AI 未能產出內容，可能是安全過濾器攔截。");
-
-                    // 強化 JSON 解析
-                    try {
-                        const jsonPart = rawText.match(/\{[\s\S]*\}/);
-                        if (!jsonPart) throw new Error("回傳格式非 JSON");
-                        const parsed = JSON.parse(jsonPart[0]);
-                        setAnalysis(parsed);
-                    } catch (pErr) {
-                        console.error("RAW DATA:", rawText);
-                        setError(`解析失敗。AI 原始回傳：${rawText.substring(0, 100)}...`);
-                    }
-
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-
-            const copyToClipboard = () => {
-                if (!analysis) return;
-                const text = `${analysis.summary}\n\n風格：${analysis.chinese_details?.style}\n情節：${analysis.chinese_details?.subject}`;
-                const el = document.createElement('textarea');
-                el.value = text;
-                document.body.appendChild(el);
-                el.select();
-                document.execCommand('copy');
-                document.body.removeChild(el);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-            };
-
-            return (
-                <div className="max-w-2xl mx-auto px-4 py-10">
-                    {/* API Settings */}
-                    <div className="bg-white rounded-2xl shadow-sm border mb-8 overflow-hidden">
-                        <div 
-                            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-                            className="p-4 flex justify-between items-center cursor-pointer bg-slate-50 hover:bg-slate-100"
-                        >
-                            <span className="text-[10px] font-black text-slate-500 tracking-widest uppercase">API Configuration {apiKey && "✅"}</span>
-                            <span className="text-xs">{isSettingsOpen ? "▲" : "▼"}</span>
-                        </div>
-                        {isSettingsOpen && (
-                            <div className="p-5 space-y-3">
-                                <input 
-                                    type="password"
-                                    placeholder="貼上您的 Gemini API Key"
-                                    value={apiKey}
-                                    onChange={(e) => {
-                                        const val = e.target.value.trim();
-                                        setApiKey(val);
-                                        localStorage.setItem('gemini_api_key', val);
-                                    }}
-                                    className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs shadow-inner"
-                                />
-                                <div className="flex justify-between text-[10px] text-slate-400 font-bold px-1">
-                                    <span>本地儲存模式</span>
-                                    <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-indigo-600">取得新 KEY →</a>
-                                </div>
-                            </div>
-                        )}
+                <div id="previewContainer" class="hidden bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <img id="imagePreview" src="" alt="預覽" class="w-full h-auto max-h-[400px] object-contain bg-slate-100">
+                    <div class="p-4 border-t border-slate-100 flex justify-between items-center">
+                        <span class="text-sm text-slate-500" id="fileName">image.jpg</span>
+                        <button id="clearBtn" class="text-red-500 hover:text-red-600 text-sm font-medium">清除圖片</button>
                     </div>
+                </div>
 
-                    {/* Logo */}
-                    <div className="text-center mb-12">
-                        <div className="w-16 h-16 bg-slate-900 text-white rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 text-3xl font-black shadow-2xl ring-8 ring-indigo-50">A</div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">Prompt Lab</h1>
-                    </div>
+                <button id="analyzeBtn" disabled class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:bg-slate-300 disabled:shadow-none transition-all flex items-center justify-center gap-2">
+                    <span id="btnText">開始分析圖片</span>
+                    <i id="btnLoader" class="fa-solid fa-circle-notch loading-spin hidden"></i>
+                </button>
+            </div>
 
-                    {/* Image Area */}
-                    <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-slate-200 mb-8">
-                        <div 
-                            onClick={() => document.getElementById('file-upload').click()}
-                            className={`border-4 border-double rounded-[2rem] min-h-[320px] flex items-center justify-center cursor-pointer transition-all ${selectedImage ? 'bg-slate-50 border-indigo-200' : 'border-slate-200 hover:border-indigo-400'}`}
-                        >
-                            {selectedImage ? (
-                                <img src={selectedImage} className="max-h-[280px] object-contain rounded-2xl" />
-                            ) : (
-                                <div className="text-center space-y-3 opacity-20">
-                                    <p className="text-5xl">📷</p>
-                                    <p className="font-black text-xs uppercase tracking-widest">Select Image</p>
-                                </div>
-                            )}
-                            <input id="file-upload" type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-                        </div>
-                        
-                        <button 
-                            onClick={analyzeImage}
-                            disabled={isLoading || !imageContent.data}
-                            className={`w-full mt-8 py-5 rounded-2xl font-black text-xl transition-all shadow-xl active:scale-95 ${isLoading || !imageContent.data ? 'bg-slate-100 text-slate-300' : 'bg-slate-900 text-white hover:bg-indigo-600 shadow-indigo-100'}`}
-                        >
-                            {isLoading ? "PROSESSING..." : "開始深度分析"}
+            <!-- Right: Results Section -->
+            <div class="space-y-4">
+                <div id="resultCard" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 min-h-[450px] relative">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-slate-800">分析結果</h2>
+                        <button id="copyBtn" class="hidden text-slate-500 hover:text-blue-600" title="複製文字">
+                            <i class="fa-regular fa-copy"></i>
                         </button>
                     </div>
 
-                    {/* Error Box */}
-                    {error && (
-                        <div className="p-6 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-bold mb-8 animate-up flex gap-4">
-                            <span className="text-xl">⚠️</span>
-                            <div className="overflow-hidden">
-                                <p className="mb-1 uppercase tracking-wider">Debug Log:</p>
-                                <p className="opacity-75 font-mono break-words leading-relaxed">{error}</p>
-                            </div>
-                        </div>
-                    )}
+                    <div id="placeholderText" class="flex flex-col items-center justify-center h-full text-slate-400 space-y-2 mt-20">
+                        <i class="fa-solid fa-wand-magic-sparkles text-4xl mb-2"></i>
+                        <p>上傳圖片並點擊分析</p>
+                    </div>
 
-                    {/* Result Card */}
-                    {analysis && (
-                        <div className="bg-white rounded-[3rem] shadow-2xl border border-slate-100 overflow-hidden result-card">
-                            <div className="p-8 border-b bg-slate-50 flex justify-between items-center">
-                                <h2 className="font-black text-slate-900 italic uppercase">Analysis Result</h2>
-                                <button onClick={copyToClipboard} className={`px-5 py-2 rounded-xl text-[10px] font-black transition-all ${copied ? 'bg-emerald-500 text-white shadow-lg' : 'bg-slate-900 text-white'}`}>
-                                    {copied ? "COPIED" : "COPY DATA"}
-                                </button>
-                            </div>
-                            <div className="p-10 md:p-14 space-y-12">
-                                <p className="font-bold text-2xl tracking-tight text-slate-900 leading-tight">{analysis.summary}</p>
-                                
-                                <div className="space-y-12">
-                                    <section className="pl-6 border-l-4 border-indigo-500">
-                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-6 italic">Chinese Description</h3>
-                                        <div className="space-y-6">
-                                            <div className="space-y-1">
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Style & Composition</span>
-                                                <p className="text-slate-700 font-medium text-lg leading-relaxed">{analysis.chinese_details?.style}</p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Subject Matter</span>
-                                                <p className="text-slate-700 font-medium text-lg leading-relaxed">{analysis.chinese_details?.subject}</p>
-                                            </div>
-                                        </div>
-                                    </section>
+                    <div id="errorMessage" class="hidden p-4 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">
+                        <!-- Error goes here -->
+                    </div>
 
-                                    <section>
-                                        <h3 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-6 italic">Prompt Keywords</h3>
-                                        <div className="bg-slate-900 p-8 rounded-[2rem] font-mono text-sm text-indigo-300 leading-relaxed shadow-inner">
-                                            {Array.isArray(analysis.english_prompts) ? analysis.english_prompts.join(', ') : analysis.english_prompts}
-                                        </div>
-                                    </section>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <footer className="mt-20 text-center text-slate-300 text-[9px] font-black tracking-[0.4em] uppercase">
-                        AI Vision Lab v1.3
-                    </footer>
+                    <div id="resultContent" class="prose prose-slate max-w-none hidden">
+                        <!-- Markdown-like content from AI -->
+                    </div>
                 </div>
-            );
-        };
+            </div>
+        </div>
+    </div>
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+    <!-- Message Box Overlay -->
+    <div id="msgBox" class="fixed bottom-6 right-6 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 text-white px-6 py-3 rounded-xl shadow-2xl z-50">
+        <span id="msgText"></span>
+    </div>
+
+    <script>
+        // --- 初始化變數 ---
+        let currentApiKey = "";
+        let selectedImageBase64 = null;
+        const MODEL_NAME = "gemini-2.5-flash-preview-09-2025";
+        
+        // DOM 元素
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveKeyBtn = document.getElementById('saveKeyBtn');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewContainer = document.getElementById('previewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const resultContent = document.getElementById('resultContent');
+        const placeholderText = document.getElementById('placeholderText');
+        const errorMessage = document.getElementById('errorMessage');
+        const btnLoader = document.getElementById('btnLoader');
+        const btnText = document.getElementById('btnText');
+        const clearBtn = document.getElementById('clearBtn');
+        const copyBtn = document.getElementById('copyBtn');
+        const msgBox = document.getElementById('msgBox');
+        const msgText = document.getElementById('msgText');
+
+        // --- 功能函式 ---
+
+        function showMessage(text) {
+            msgText.innerText = text;
+            msgBox.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                msgBox.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // 處理 API Key
+        saveKeyBtn.addEventListener('click', () => {
+            currentApiKey = apiKeyInput.value.trim();
+            if (currentApiKey) {
+                showMessage("API Key 已更新");
+                checkReady();
+            }
+        });
+
+        // 處理檔案上傳
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drop-zone--over');
+        });
+
+        ['dragleave', 'dragend'].forEach(type => {
+            dropZone.addEventListener(type, () => {
+                dropZone.classList.remove('drop-zone--over');
+            });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drop-zone--over');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showMessage("請上傳圖片檔案");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                selectedImageBase64 = reader.result.split(',')[1];
+                imagePreview.src = reader.result;
+                document.getElementById('fileName').innerText = file.name;
+                
+                dropZone.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+                checkReady();
+            };
+        }
+
+        clearBtn.addEventListener('click', () => {
+            selectedImageBase64 = null;
+            imagePreview.src = "";
+            fileInput.value = "";
+            dropZone.classList.remove('hidden');
+            previewContainer.classList.add('hidden');
+            checkReady();
+        });
+
+        function checkReady() {
+            analyzeBtn.disabled = !(currentApiKey && selectedImageBase64);
+        }
+
+        // --- API 請求與重試機制 ---
+
+        async function callGemini(base64Data, retryCount = 0) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${currentApiKey}`;
+            
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: "請仔細分析這張圖片。請先簡短描述圖片內容，接著列出 5-8 個關鍵句子（重點語句），最後列出 10 個核心關鍵字。請使用繁體中文回答，並使用清晰的條列格式。" },
+                        { inlineData: { mimeType: "image/png", data: base64Data } }
+                    ]
+                }]
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || "請求失敗");
+                }
+
+                return await response.json();
+            } catch (error) {
+                if (retryCount < 5) {
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return callGemini(base64Data, retryCount + 1);
+                }
+                throw error;
+            }
+        }
+
+        // --- 主程式執行 ---
+
+        analyzeBtn.addEventListener('click', async () => {
+            // UI 狀態切換
+            analyzeBtn.disabled = true;
+            btnLoader.classList.remove('hidden');
+            btnText.innerText = "分析中...";
+            errorMessage.classList.add('hidden');
+            resultContent.classList.add('hidden');
+            placeholderText.classList.add('hidden');
+            copyBtn.classList.add('hidden');
+
+            try {
+                const result = await callGemini(selectedImageBase64);
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (text) {
+                    // 將 Markdown 格式稍微處理成 HTML 顯示 (簡單處理)
+                    resultContent.innerHTML = text
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/### (.*?)(<br>|$)/g, '<h3 class="text-xl font-bold mt-4 mb-2 text-blue-600">$1</h3>')
+                        .replace(/## (.*?)(<br>|$)/g, '<h2 class="text-2xl font-bold mt-6 mb-3 border-b pb-1">$1</h2>');
+                    
+                    resultContent.classList.remove('hidden');
+                    copyBtn.classList.remove('hidden');
+                } else {
+                    throw new Error("AI 未返回有效內容");
+                }
+            } catch (error) {
+                errorMessage.innerText = `錯誤: ${error.message}`;
+                errorMessage.classList.remove('hidden');
+            } finally {
+                analyzeBtn.disabled = false;
+                btnLoader.classList.add('hidden');
+                btnText.innerText = "重新分析";
+            }
+        });
+
+        // 複製功能
+        copyBtn.addEventListener('click', () => {
+            const textToCopy = resultContent.innerText;
+            const el = document.createElement('textarea');
+            el.value = textToCopy;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            showMessage("內容已複製到剪貼簿");
+        });
     </script>
 </body>
 </html>
+
