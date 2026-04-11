@@ -221,7 +221,7 @@
   }
 
   // Prompts — each includes explicit JSON instruction to ensure reliable output
-  const JSON_FORMAT = '\n\n你的回應必須只有純 JSON，不含任何 markdown 或額外文字，格式如下：{"description":"此處填寫圖像描述","keyPhrases":["關鍵句1","關鍵句2","關鍵句3","關鍵句4","關鍵句5"]}';
+  const JSON_FORMAT = '';  // format now handled by system prompt
   const prompts = {
     general:   '請用繁體中文分析這張圖片。首先提供一段流暢的圖像描述（2-4句），然後萃取5-7個最具代表性的關鍵句子，捕捉圖片的核心意涵、情感或重要細節。' + JSON_FORMAT,
     academic:  '請用繁體中文以學術角度分析這張圖片。首先提供嚴謹的圖像描述（2-4句），然後萃取5-7個學術關鍵句子，著重結構、符號意義或可引用的觀察點。' + JSON_FORMAT,
@@ -242,7 +242,20 @@
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     const style = document.getElementById('styleSelect').value;
 
-    const systemText = '你是專業影像分析師。規則：1. 只輸出純 JSON，第一個字元必須是 {，最後一個字元必須是 }。2. 禁止使用 markdown、程式碼區塊（```）、或任何說明文字。3. JSON 結構固定為 {"description":"...","keyPhrases":["...","...","...","...","..."]}，不得更改欄位名稱。';
+    const systemText = `你是專業影像分析師。請嚴格按照以下格式回應，不得有任何其他文字：
+
+DESCRIPTION:
+（在此寫圖像描述，可多句，不限制長度）
+KEYPHRASES:
+1. 第一個關鍵句
+2. 第二個關鍵句
+3. 第三個關鍵句
+4. 第四個關鍵句
+5. 第五個關鍵句
+6. 第六個關鍵句（可選）
+7. 第七個關鍵句（可選）
+
+絕對不可輸出 JSON 或任何其他格式。`;
 
     try {
       const res = await fetch(url, {
@@ -265,80 +278,25 @@
 
       const data = await res.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-      // Show raw AI response in console for debugging
-      console.log('=== Gemini raw response ===');
-      console.log(JSON.stringify(data, null, 2));
-      console.log('=== raw text ===');
-      console.log(raw);
+      console.log('=== raw text ===', raw);
 
       if (!raw) throw new Error('AI 未回傳任何內容，請重試');
 
-      let parsed;
+      // Parse plain-text format: DESCRIPTION: ... KEYPHRASES: 1. ... 2. ...
+      const descMatch = raw.match(/DESCRIPTION:\s*([\s\S]*?)(?=KEYPHRASES:)/i);
+      const keyMatch  = raw.match(/KEYPHRASES:\s*([\s\S]*)/i);
 
-      // Step 1: try response_mime_type=application/json path (parts may be object directly)
-      const part0 = data?.candidates?.[0]?.content?.parts?.[0];
-      if (part0 && typeof part0.text === 'undefined' && typeof part0 === 'object') {
-        parsed = part0;
-      }
+      if (!descMatch || !keyMatch) throw new Error('回應格式異常，請重試');
 
-      // Step 2: clean and parse text
-      if (!parsed) {
-        try {
-          let clean = raw.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim();
-          // Sanitize: replace curly quotes, remove literal newlines inside strings
-          clean = clean
-            .replace(/[\u201C\u201D]/g, '"')   // curly double quotes → straight
-            .replace(/[\u2018\u2019]/g, "'")   // curly single quotes → straight
-            .replace(/\n/g, '\\n')             // literal newline inside JSON string → escaped
-            .replace(/\r/g, '');                 // remove carriage returns
-          const match = clean.match(/\{[\s\S]*\}/);
-          if (match) clean = match[0];
-          parsed = JSON.parse(clean);
-        } catch(e) {
-          console.warn('Step 2 parse failed:', e.message);
-        }
-      }
+      const description = descMatch[1].trim();
+      const keyPhrases = keyMatch[1]
+        .split('\n')
+        .map(l => l.replace(/^\d+[.)、．]\s*/, '').replace(/^[-•]\s*/, '').trim())
+        .filter(l => l.length > 2)
+        .slice(0, 7);
 
-      // Step 3: manually extract description and keyPhrases from raw text
-      if (!parsed) {
-        try {
-          // Extract description value — handle multiline content
-          const descMatch = raw.match(/"description"\s*:\s*"((?:[\s\S]*?))(?<!\\)"/);
-          // Extract keyPhrases array content
-          const arrayMatch = raw.match(/"keyPhrases"\s*:\s*\[([\s\S]*?)\]/);
-          let phrases = [];
-          if (arrayMatch) {
-            phrases = [...arrayMatch[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-          }
-          if (descMatch && phrases.length) {
-            parsed = { description: descMatch[1].replace(/\\n/g, ' ').trim(), keyPhrases: phrases.slice(0, 7) };
-          }
-        } catch(e) {
-          console.warn('Step 3 fallback failed:', e.message);
-        }
-      }
-
-      // Step 4: ask AI to only return the fields we need, plain text fallback
-      if (!parsed) {
-        try {
-          const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-          // Try to find description-like and phrase-like lines
-          const descLine = lines.find(l => l.length > 20 && !l.startsWith('"key') && !l.startsWith('[') && !l.startsWith('{'));
-          const phraseLines = lines.filter(l => l.startsWith('-') || l.match(/^\d+[.)]/));
-          if (descLine && phraseLines.length) {
-            parsed = {
-              description: descLine.replace(/^"description"\s*:\s*"?/, '').replace(/"$/, ''),
-              keyPhrases: phraseLines.map(l => l.replace(/^[-\d.)\s]+/, '').replace(/^"|"$/g, '').trim()).slice(0, 7)
-            };
-          }
-        } catch(e) {
-          console.warn('Step 4 fallback failed:', e.message);
-        }
-      }
-
-      if (!parsed) throw new Error('回應格式解析失敗，AI 原始回應：' + raw.substring(0, 200));
-      renderResults(parsed);
+      if (!description || keyPhrases.length === 0) throw new Error('回應內容不完整，請重試');
+      renderResults({ description, keyPhrases });
     } catch (err) {
       showError('錯誤：' + err.message);
     } finally {
