@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
@@ -255,7 +254,7 @@
             { inline_data: { mime_type: currentMime, data: currentBase64 } },
             { text: prompts[style] }
           ]}],
-          generationConfig: { response_mime_type: 'application/json', temperature: 0.7, maxOutputTokens: 1024 }
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 }
         })
       });
 
@@ -267,35 +266,53 @@
       const data = await res.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-      // Robust JSON extraction: strip markdown fences, then find first { ... }
+      // Show raw AI response in console for debugging
+      console.log('=== Gemini raw response ===');
+      console.log(JSON.stringify(data, null, 2));
+      console.log('=== raw text ===');
+      console.log(raw);
+
+      if (!raw) throw new Error('AI 未回傳任何內容，請重試');
+
       let parsed;
-      try {
-        let clean = raw
-          .replace(/^```[\w]*\n?/m, '')  // opening fence
-          .replace(/```\s*$/m, '')          // closing fence
-          .trim();
-        // If still not starting with {, grab the first JSON object
-        if (!clean.startsWith('{')) {
+
+      // Step 1: try response_mime_type=application/json path (parts may be object directly)
+      const part0 = data?.candidates?.[0]?.content?.parts?.[0];
+      if (part0 && typeof part0.text === 'undefined' && typeof part0 === 'object') {
+        parsed = part0;
+      }
+
+      // Step 2: clean and parse text
+      if (!parsed) {
+        try {
+          // Remove all markdown fences
+          let clean = raw.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim();
+          // Extract first JSON object
           const match = clean.match(/\{[\s\S]*\}/);
           if (match) clean = match[0];
-        }
-        parsed = JSON.parse(clean);
-      } catch (e) {
-        // Last resort: try to extract fields with regex
-        try {
-          const descMatch = raw.match(/"description"\s*:\s*"([^"]+)"/);
-          const phrasesMatch = [...raw.matchAll(/"([^"]{5,})"/g)]
-            .map(m => m[1])
-            .filter(s => s !== 'description' && s !== 'keyPhrases');
-          if (descMatch && phrasesMatch.length > 1) {
-            parsed = { description: descMatch[1], keyPhrases: phrasesMatch.slice(0, 7) };
-          } else {
-            throw new Error('格式解析失敗');
-          }
-        } catch {
-          throw new Error('回應格式解析失敗，請重試');
+          parsed = JSON.parse(clean);
+        } catch(e) {
+          console.warn('Step 2 parse failed:', e.message);
         }
       }
+
+      // Step 3: regex field extraction fallback
+      if (!parsed) {
+        try {
+          const descMatch = raw.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          const keyMatch = [...raw.matchAll(/"keyPhrases"\s*:\s*\[([\s\S]*?)\]/g)];
+          const phraseMatches = keyMatch.length
+            ? [...keyMatch[0][1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1])
+            : [...raw.matchAll(/"([^"]{8,120})"/g)].map(m=>m[1]).filter(s=>!['description','keyPhrases'].includes(s));
+          if (descMatch && phraseMatches.length) {
+            parsed = { description: descMatch[1], keyPhrases: phraseMatches.slice(0,7) };
+          }
+        } catch(e) {
+          console.warn('Step 3 fallback failed:', e.message);
+        }
+      }
+
+      if (!parsed) throw new Error('回應格式解析失敗，AI 原始回應：' + raw.substring(0, 200));
       renderResults(parsed);
     } catch (err) {
       showError('錯誤：' + err.message);
@@ -353,6 +370,5 @@
   function hideError() { document.getElementById('errorMsg').style.display = 'none'; }
   function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
-
 </body>
 </html>
