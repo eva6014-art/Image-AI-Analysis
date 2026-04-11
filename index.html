@@ -230,19 +230,14 @@
     technical: '請用繁體中文以技術細節角度分析這張圖片。首先描述技術要素（2-4句），然後萃取5-7個技術性關鍵句子，著重構圖、色彩、規格或專業細節。' + JSON_FORMAT
   };
 
-  // Analyze via Gemini
-  async function analyze() {
-    const apiKey = sessionStorage.getItem('gemini_key');
-    if (!apiKey) { openModal(); return; }
-    if (!currentBase64) return;
+  // Models to try in order (fallback for free tier keys)
+  const MODELS = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash-latest'
+  ];
 
-    showLoading(true); hideError();
-    document.getElementById('results').style.display = 'none';
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
-    const style = document.getElementById('styleSelect').value;
-
-    const systemText = `你是專業影像分析師。請嚴格按照以下格式回應，不得有任何其他文字：
+  const systemText = `你是專業影像分析師。請嚴格按照以下格式回應，不得有任何其他文字：
 
 DESCRIPTION:
 （在此寫圖像描述，可多句，不限制長度）
@@ -257,24 +252,56 @@ KEYPHRASES:
 
 絕對不可輸出 JSON 或任何其他格式。`;
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemText }] },
-          contents: [{ parts: [
-            { inline_data: { mime_type: currentMime, data: currentBase64 } },
-            { text: prompts[style] }
-          ]}],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
-        })
-      });
+  async function callGemini(apiKey, model, prompt) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemText }] },
+        contents: [{ parts: [
+          { inline_data: { mime_type: currentMime, data: currentBase64 } },
+          { text: prompt }
+        ]}],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
+      })
+    });
+    return res;
+  }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  // Analyze via Gemini
+  async function analyze() {
+    const apiKey = sessionStorage.getItem('gemini_key');
+    if (!apiKey) { openModal(); return; }
+    if (!currentBase64) return;
+
+    showLoading(true); hideError();
+    document.getElementById('results').style.display = 'none';
+
+    const style = document.getElementById('styleSelect').value;
+
+    try {
+      // Try models in order until one succeeds
+      let res, usedModel;
+      for (const model of MODELS) {
+        res = await callGemini(apiKey, model, prompts[style]);
+        if (res.ok) { usedModel = model; break; }
+        const errData = await res.json();
+        const errMsg = errData?.error?.message || '';
+        // Only fall through if it's a model access / quota issue
+        const isFallbackable = res.status === 404 || res.status === 429 ||
+          errMsg.includes('not found') || errMsg.includes('not supported') ||
+          errMsg.includes('quota') || errMsg.includes('PERMISSION_DENIED');
+        if (!isFallbackable) throw new Error(errMsg || `HTTP ${res.status}`);
+        console.log(`Model ${model} unavailable, trying next...`);
       }
+
+      if (!res || !res.ok) {
+        const err = await res.json();
+        throw new Error(err?.error?.message || '所有模型均無法使用，請確認 API 金鑰');
+      }
+
+      console.log('Using model:', usedModel);
 
       const data = await res.json();
       const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
