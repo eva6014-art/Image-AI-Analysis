@@ -285,9 +285,13 @@
       // Step 2: clean and parse text
       if (!parsed) {
         try {
-          // Remove all markdown fences
           let clean = raw.replace(/```[\w]*\n?/g, '').replace(/```/g, '').trim();
-          // Extract first JSON object
+          // Sanitize: replace curly quotes, remove literal newlines inside strings
+          clean = clean
+            .replace(/[\u201C\u201D]/g, '"')   // curly double quotes → straight
+            .replace(/[\u2018\u2019]/g, "'")   // curly single quotes → straight
+            .replace(/\n/g, '\\n')             // literal newline inside JSON string → escaped
+            .replace(/\r/g, '');                 // remove carriage returns
           const match = clean.match(/\{[\s\S]*\}/);
           if (match) clean = match[0];
           parsed = JSON.parse(clean);
@@ -296,19 +300,40 @@
         }
       }
 
-      // Step 3: regex field extraction fallback
+      // Step 3: manually extract description and keyPhrases from raw text
       if (!parsed) {
         try {
-          const descMatch = raw.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-          const keyMatch = [...raw.matchAll(/"keyPhrases"\s*:\s*\[([\s\S]*?)\]/g)];
-          const phraseMatches = keyMatch.length
-            ? [...keyMatch[0][1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1])
-            : [...raw.matchAll(/"([^"]{8,120})"/g)].map(m=>m[1]).filter(s=>!['description','keyPhrases'].includes(s));
-          if (descMatch && phraseMatches.length) {
-            parsed = { description: descMatch[1], keyPhrases: phraseMatches.slice(0,7) };
+          // Extract description value — handle multiline content
+          const descMatch = raw.match(/"description"\s*:\s*"((?:[\s\S]*?))(?<!\\)"/);
+          // Extract keyPhrases array content
+          const arrayMatch = raw.match(/"keyPhrases"\s*:\s*\[([\s\S]*?)\]/);
+          let phrases = [];
+          if (arrayMatch) {
+            phrases = [...arrayMatch[1].matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+          }
+          if (descMatch && phrases.length) {
+            parsed = { description: descMatch[1].replace(/\\n/g, ' ').trim(), keyPhrases: phrases.slice(0, 7) };
           }
         } catch(e) {
           console.warn('Step 3 fallback failed:', e.message);
+        }
+      }
+
+      // Step 4: ask AI to only return the fields we need, plain text fallback
+      if (!parsed) {
+        try {
+          const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+          // Try to find description-like and phrase-like lines
+          const descLine = lines.find(l => l.length > 20 && !l.startsWith('"key') && !l.startsWith('[') && !l.startsWith('{'));
+          const phraseLines = lines.filter(l => l.startsWith('-') || l.match(/^\d+[.)]/));
+          if (descLine && phraseLines.length) {
+            parsed = {
+              description: descLine.replace(/^"description"\s*:\s*"?/, '').replace(/"$/, ''),
+              keyPhrases: phraseLines.map(l => l.replace(/^[-\d.)\s]+/, '').replace(/^"|"$/g, '').trim()).slice(0, 7)
+            };
+          }
+        } catch(e) {
+          console.warn('Step 4 fallback failed:', e.message);
         }
       }
 
